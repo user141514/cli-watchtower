@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CLI Watchtower</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=DM+Mono:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-deep:    #060709;
+    --bg-panel:   #0c0e13;
+    --bg-surface: #11141b;
+    --bg-raised:  #161922;
+    --bg-input:   #0a0c10;
+    --border:     #1c2030;
+    --border-act: #2a3045;
+    --signal:     #00e676;
+    --signal-dim: #0d331a;
+    --amber:      #ff9100;
+    --amber-dim:  #331a00;
+    --steel:      #4fc3f7;
+    --steel-dim:  #0a1a2a;
+    --text:       #c8ccd4;
+    --text-dim:   #5a6070;
+    --text-bright:#e8ecf2;
+    --danger:     #ff3d3d;
+    --shadow-l:   0 1px 3px rgba(0,0,0,0.5);
+    --shadow-m:   0 2px 8px rgba(0,0,0,0.55);
+    --shadow-sunk: inset 0 2px 12px rgba(0,0,0,0.6), inset 0 1px 3px rgba(0,0,0,0.4);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    height: 100vh; display: flex;
+    font-family: 'JetBrains Mono', 'Consolas', monospace;
+    background:
+      radial-gradient(ellipse at 85% 25%, rgba(79,195,247,0.025) 0%, transparent 55%),
+      radial-gradient(ellipse at 15% 85%, rgba(0,230,118,0.018) 0%, transparent 50%),
+      var(--bg-deep);
+    color: var(--text);
+    overflow: hidden;
+  }
+
+  /* ── Background atmosphere ── */
+  body::before {
+    content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,230,118,0.008) 2px, rgba(0,230,118,0.008) 3px),
+      radial-gradient(ellipse at 80% 20%, rgba(79,195,247,0.03) 0%, transparent 70%),
+      radial-gradient(ellipse at 20% 80%, rgba(0,230,118,0.02) 0%, transparent 60%);
+  }
+
+  /* ── Sidebar: Signal Rack ── */
+  #sidebar {
+    width: 360px; min-width: 360px; position: relative; z-index: 2;
+    display: flex; flex-direction: column;
+    border-right: 1px solid var(--border);
+    background: var(--bg-panel);
+    box-shadow: 2px 0 20px rgba(0,0,0,0.5), 4px 0 0 rgba(0,0,0,0.15);
+  }
+  #sidebar-header {
+    padding: 18px 18px 14px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, rgba(255,255,255,0.015) 0%, transparent 100%);
+  }
+  #sidebar-header h2 {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px; font-weight: 400; letter-spacing: 0.15em;
+    color: var(--steel); text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  #sidebar-controls {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .btn-refresh {
+    padding: 5px 14px; font-family: 'DM Mono', monospace; font-size: 11px;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    background: transparent; color: var(--steel);
+    border: 1px solid var(--border-act); cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-refresh:hover { background: var(--steel-dim); border-color: var(--steel); }
+  .toggle-row {
+    display: flex; align-items: center; gap: 6px; margin-left: auto;
+    font-size: 10px; color: var(--text-dim); cursor: pointer;
+    font-family: 'DM Mono', monospace; letter-spacing: 0.04em;
+  }
+  .toggle-row input[type=checkbox] {
+    accent-color: var(--signal); width: 13px; height: 13px; cursor: pointer;
+  }
+
+  #cand-list {
+    flex: 1; overflow-y: auto; padding: 8px 12px;
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  }
+  #cand-list::-webkit-scrollbar { width: 4px; }
+  #cand-list::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .cand {
+    padding: 11px 14px; margin: 5px 0;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border);
+    border-radius: 2px;
+    cursor: pointer; font-size: 11px; line-height: 1.55;
+    background: var(--bg-surface);
+    box-shadow: var(--shadow-l);
+    transition: all 0.2s;
+    position: relative; overflow: hidden;
+  }
+  .cand::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(135deg, transparent 60%, rgba(0,230,118,0.015));
+    pointer-events: none;
+  }
+  .cand:hover {
+    border-color: var(--border-act);
+    background: var(--bg-raised);
+    box-shadow: var(--shadow-m);
+    transform: translateY(-1px);
+  }
+  .cand.interesting {
+    border-left-color: var(--signal);
+    box-shadow: var(--shadow-l), inset 4px 0 12px -4px rgba(0,230,118,0.12);
+  }
+  .cand .sig-row {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 3px;
+  }
+  .cand .sig-dot {
+    width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+    background: var(--text-dim);
+  }
+  .cand.interesting .sig-dot {
+    background: var(--signal);
+    box-shadow: 0 0 6px var(--signal);
+  }
+  .cand .pid { color: var(--steel); font-weight: 500; }
+  .cand .name { color: var(--amber); }
+  .cand .name.custom-name { color: var(--signal); font-style: italic; }
+  .cand .rename-btn {
+    color: var(--text-dim); cursor: pointer; font-size: 11px;
+    opacity: 0; transition: opacity 0.15s; user-select: none;
+  }
+  .rename-input {
+    background: var(--bg-input); color: var(--signal);
+    border: 1px solid var(--signal); outline: none;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    padding: 1px 4px; width: 130px; border-radius: 2px;
+  }
+  .cand:hover .rename-btn { opacity: 1; }
+  .cand .rename-btn:hover { color: var(--steel); }
+  .cand .conhost { color: var(--text-dim); font-size: 10px; }
+  .cand .cmd {
+    color: var(--text-dim); font-size: 10px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    padding-left: 14px;
+  }
+
+  /* ── Skills section ── */
+  #skills-section {
+    padding: 16px 18px; border-top: 1px solid var(--border);
+    background: var(--bg-surface);
+  }
+  #skills-section h3 {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px; font-weight: 400; letter-spacing: 0.1em;
+    color: var(--amber); text-transform: uppercase; margin-bottom: 8px;
+  }
+  #skills-load-row { display: flex; gap: 4px; margin-bottom: 8px; }
+  #skills-path-input {
+    flex: 1; min-width: 0; background: var(--bg-input); color: var(--text);
+    border: 1px solid var(--border); padding: 5px 8px;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; outline: none;
+  }
+  #skills-path-input:focus { border-color: var(--amber); }
+  .btn-skill {
+    padding: 5px 10px; background: transparent; border: 1px solid var(--border);
+    color: var(--text-dim); cursor: pointer; font-size: 12px;
+    transition: all 0.15s;
+  }
+  .btn-skill:hover { border-color: var(--amber); color: var(--amber); }
+  #skill-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .skill-chip {
+    display: inline-block; padding: 3px 10px;
+    font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.04em;
+    background: transparent; color: var(--signal);
+    border: 1px solid var(--signal-dim); cursor: pointer;
+    transition: all 0.15s; user-select: none;
+  }
+  .skill-chip:hover { background: var(--signal-dim); border-color: var(--signal); }
+
+  /* ── Main area ── */
+  #main {
+    flex: 1; display: flex; flex-direction: column;
+    position: relative; z-index: 1; min-width: 0;
+  }
+
+  /* Tabs */
+  #tabs {
+    display: flex; min-height: 34px; align-items: stretch;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    overflow-x: auto; position: relative; z-index: 2;
+  }
+  .tab {
+    padding: 0 16px; display: flex; align-items: center; gap: 8px;
+    border-right: 1px solid var(--border); cursor: pointer;
+    font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.03em;
+    color: var(--text-dim); white-space: nowrap;
+    transition: all 0.15s; position: relative;
+    background: transparent;
+  }
+  .tab::after {
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
+    background: transparent; transition: background 0.15s;
+  }
+  .tab:hover { color: var(--text); background: var(--bg-surface); }
+  .tab.active {
+    color: var(--steel);
+    background: linear-gradient(180deg, transparent, rgba(79,195,247,0.04));
+  }
+  .tab.active::after { background: var(--steel); }
+  .tab .close {
+    font-size: 14px; color: var(--text-dim); line-height: 1;
+    transition: color 0.15s;
+  }
+  .tab .close:hover { color: var(--danger); }
+
+  /* Viewport */
+  #viewport {
+    flex: 1; overflow: auto; min-height: 0; position: relative; z-index: 0;
+    margin: 6px; border-radius: 4px;
+    padding: 16px 20px 80px;
+    display: grid;
+    background:
+      repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,230,118,0.01) 3px, rgba(0,230,118,0.01) 4px);
+    box-shadow:
+      var(--shadow-sunk),
+      0 0 0 1px rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.03);
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  }
+  #viewport::-webkit-scrollbar { width: 4px; }
+  #viewport::-webkit-scrollbar-thumb { background: var(--border); }
+  #terminal-canvas {
+    grid-area: 1 / 1;
+    display: block; margin: 0;
+    font-family: 'JetBrains Mono', 'Consolas', monospace;
+    font-size: 12.5px; line-height: 1.55;
+    user-select: none;
+  }
+  #screen-text {
+    grid-area: 1 / 1;
+    margin: 0; padding: 0;
+    font-family: 'JetBrains Mono', 'Consolas', monospace;
+    font-size: 12.5px; line-height: 1.55;
+    color: transparent;
+    white-space: pre; overflow: hidden;
+    user-select: text; cursor: text;
+    z-index: 1;
+    pointer-events: auto;
+  }
+  #screen-text::selection {
+    background: rgba(79,195,247,0.38);
+    color: transparent;
+  }
+
+  /* Status bar */
+  #status-bar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 5px 16px; font-family: 'DM Mono', monospace; font-size: 10px;
+    letter-spacing: 0.04em; color: var(--text-dim);
+    border-top: 1px solid rgba(255,255,255,0.03);
+    background: var(--bg-panel);
+    box-shadow: 0 -1px 4px rgba(0,0,0,0.3);
+    position: relative; z-index: 1;
+  }
+  #status-bar .status-dot {
+    width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0;
+    background: var(--text-dim);
+  }
+  #status-bar .status-dot.live { background: var(--signal); box-shadow: 0 0 4px var(--signal); }
+  #status-bar .status-dot.warn { background: var(--amber); box-shadow: 0 0 4px var(--amber); }
+
+  /* ── Input row ── */
+  #input-row {
+    display: flex; align-items: flex-end; padding: 12px 16px; gap: 10px;
+    border-top: 1px solid rgba(255,255,255,0.04);
+    background: var(--bg-raised);
+    box-shadow: 0 -2px 12px rgba(0,0,0,0.4);
+    position: relative; z-index: 2;
+  }
+  #input-row .prompt {
+    font-family: 'Share Tech Mono', monospace;
+    color: var(--steel); font-size: 18px; user-select: none;
+    padding-bottom: 7px; flex-shrink: 0;
+  }
+  #input-area { flex: 1; min-width: 0; position: relative; }
+  #cmd-input {
+    width: 100%; min-height: 38px; max-height: 240px; resize: none;
+    background: var(--bg-input); color: var(--text-bright);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 4px;
+    padding: 8px 50px 8px 12px;
+    font-family: 'JetBrains Mono', 'Consolas', monospace;
+    font-size: 13px; line-height: 1.5; outline: none;
+    overflow-y: auto;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,0.5);
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  #cmd-input:focus {
+    border-color: var(--steel);
+    box-shadow: inset 0 2px 6px rgba(0,0,0,0.5), 0 0 0 3px rgba(79,195,247,0.08);
+  }
+  #cmd-input::placeholder { color: var(--text-dim); font-style: italic; }
+  #cmd-input:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  /* Send button — white diamond */
+  #btn-send {
+    position: absolute; right: 7px; bottom: 7px;
+    width: 32px; height: 32px;
+    background: radial-gradient(circle at 40% 35%, #fff, #e0e0e0);
+    border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s; z-index: 2;
+    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+  }
+  #btn-send::before {
+    content: ''; position: absolute; inset: -1px;
+    background: rgba(255,255,255,0.2); z-index: -1;
+    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+    transition: all 0.2s;
+  }
+  #btn-send:hover {
+    background: radial-gradient(circle at 40% 35%, #fff, #ececec);
+    transform: scale(1.1);
+    filter: drop-shadow(0 4px 10px rgba(0,0,0,0.6)) drop-shadow(0 0 12px rgba(255,255,255,0.15));
+  }
+  #btn-send:hover::before { inset: -3px; }
+  #btn-send:active {
+    transform: scale(0.93);
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
+    transition: all 0.05s;
+  }
+  #btn-send::after {
+    content: '→'; color: #0a0a0c; font-size: 15px; font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  /* Send button dims when textarea is disabled (no session) */
+  #cmd-input:disabled ~ #btn-send {
+    opacity: 0.35;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));
+  }
+  #cmd-input:disabled ~ #btn-send:hover {
+    transform: none;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));
+  }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div id="sidebar-header">
+    <h2>◈ Signal Acquisition</h2>
+    <div id="sidebar-controls">
+      <button class="btn-refresh" onclick="loadCandidates()">⟳ Scan</button>
+      <label class="toggle-row">
+        <input type="checkbox" id="show-all" onchange="renderCandidates()">
+        all processes
+      </label>
+    </div>
+  </div>
+  <div id="cand-list"></div>
+  <div id="skills-section">
+    <h3>◈ Skills</h3>
+    <div id="skills-load-row">
+      <input id="skills-path-input" placeholder="Skills directory…"
+             onkeydown="if(event.key==='Enter') loadSkills();" />
+      <button class="btn-skill" onclick="browseSkillsFolder()" title="Browse folder">📂</button>
+      <button class="btn-skill" onclick="loadSkills()">Load</button>
+    </div>
+    <div id="skill-chips"></div>
+  </div>
+</div>
+
+<div id="main">
+  <div id="tabs"></div>
+  <div id="viewport"><canvas id="terminal-canvas"></canvas><pre id="screen-text" aria-hidden="true"></pre></div>
+  <div id="input-row">
+    <span class="prompt">▸</span>
+    <div id="input-area">
+      <textarea id="cmd-input" disabled placeholder="Attach a CLI to enable input…" rows="1"></textarea>
+      <button id="btn-send" title="Send (Enter)" onclick="doSend()"></button>
+    </div>
+  </div>
+  <div id="status-bar">
+    <span class="status-dot" id="status-dot"></span>
+    <span id="status">idle</span>
+  </div>
+</div>
+
+<script>
+const sessions = {};
+let activeSid = null;
+let allCandidates = [];
+
+// ── Custom names — persisted in localStorage ──
+const NAMES_KEY = "cli-watchtower-names";
+function loadNames() {
+  try { return JSON.parse(localStorage.getItem(NAMES_KEY)) || {}; }
+  catch(e) { return {}; }
+}
+function saveNames(names) {
+  try { localStorage.setItem(NAMES_KEY, JSON.stringify(names)); }
+  catch(e) {}
+}
+let customNames = loadNames();
+
+function renamePID(pid, name) {
+  const trimmed = (name || "").trim();
+  if (trimmed) {
+    customNames[String(pid)] = trimmed;
+  } else {
+    delete customNames[String(pid)];
+  }
+  saveNames(customNames);
+  renderCandidates();
+  // Update tab labels for any tabs showing this pid
+  document.querySelectorAll(".tab").forEach(el => {
+    const sid = el.id.replace("tab-", "");
+    const s = sessions[sid];
+    if (s && String(s.pid) === String(pid)) {
+      const display = getName(pid, s.name);
+      el.querySelector("span:first-child").textContent = display;
+    }
+  });
+}
+
+function getName(pid, fallback) {
+  return customNames[String(pid)] || fallback || "unknown";
+}
+
+// ── Textarea auto-resize + key bindings ──
+let _sending = false; // duplicate submit guard
+(function initTextarea() {
+  const ta = document.getElementById("cmd-input");
+  let composing = false;
+  function autoResize() {
+    ta.style.height = "auto";
+    ta.style.height = Math.min(ta.scrollHeight, 240) + "px";
+  }
+  ta.addEventListener("input", autoResize);
+  ta.addEventListener("compositionstart", () => { composing = true; });
+  ta.addEventListener("compositionend", () => { composing = false; });
+  ta.addEventListener("keydown", function(e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      // IME composition guard: don't send while composing CJK text
+      if (composing || e.isComposing || e.keyCode === 229) return;
+      e.preventDefault(); doSend();
+    } else if (e.key === "Escape") {
+      ta.value = ""; autoResize(); e.preventDefault();
+    }
+  });
+  autoResize();
+})();
+
+function doSend() {
+  if (_sending) return; // duplicate submit guard
+  const ta = document.getElementById("cmd-input");
+  const text = ta.value.trim();
+  if (!text) {
+    // Visual feedback: quick pulse on send button to indicate "no input"
+    const btn = document.getElementById("btn-send");
+    btn.style.transform = "scale(0.9)";
+    setTimeout(() => { btn.style.transform = ""; }, 150);
+    return;
+  }
+  if (!activeSid || !sessions[activeSid]) {
+    setStatus("warn", "No active CLI — select a process from Signal Acquisition");
+    return;
+  }
+  _sending = true;
+  setStatus("info", "sending...");
+  sendInput(text);
+  ta.value = "";
+  ta.style.height = "auto";
+  ta.focus(); // preserve focus after send
+  // Release lock after a short delay (allow next send)
+  setTimeout(() => { _sending = false; }, 300);
+}
+
+// ── Candidates ──
+async function loadCandidates() {
+  setStatus("info", "scanning...");
+  const r = await fetch("/api/candidates");
+  allCandidates = await r.json();
+  renderCandidates();
+}
+
+function renderCandidates() {
+  const showAll = document.getElementById("show-all").checked;
+  const list = showAll ? allCandidates : allCandidates.filter(c => c.interesting);
+  const box = document.getElementById("cand-list");
+  box.innerHTML = "";
+  if (list.length === 0) {
+    box.innerHTML = `<div style="color:var(--text-dim);font-size:11px;padding:14px;text-align:center;">
+      No AI CLI processes detected.<br>
+      <span style="color:var(--text-dim);opacity:0.5;">Check "all processes" to see everything.</span>
+    </div>`;
+    setStatus("info", `0 / ${allCandidates.length} signals`);
+    return;
+  }
+  list.forEach(c => {
+    const display = getName(c.pid, c.name);
+    const hasCustom = !!customNames[String(c.pid)];
+
+    const div = document.createElement("div");
+    div.className = "cand" + (c.interesting ? " interesting" : "");
+    div.innerHTML = `
+      <div class="sig-row">
+        <span class="sig-dot"></span>
+        <span class="pid">PID ${escapeHtml(String(c.pid))}</span>
+        <span class="name ${hasCustom ? "custom-name" : ""}"
+              title="${hasCustom ? "Original: "+escapeAttr(c.name) : ""}">${escapeHtml(display)}</span>
+        <span class="rename-btn" title="Rename">✎</span>
+        <span class="conhost">${c.conhost_pid ? "CH:"+escapeHtml(String(c.conhost_pid)) : "no-conhost"}</span>
+      </div>
+      <div class="cmd" title="${escapeAttr(c.cmdline)}">${escapeHtml(c.cmdline) || "(no cmdline)"}</div>`;
+    // Click card to attach, click pencil to rename
+    div.onclick = (e) => {
+      if (e.target.classList.contains("rename-btn")) {
+        e.stopPropagation();
+        startRename(c.pid, c.name);
+        return;
+      }
+      attachTo(c);
+    };
+    box.appendChild(div);
+  });
+  const total = allCandidates.length;
+  setStatus("info", showAll ? `${total} signals total` : `${list.length} active / ${total} total`);
+}
+
+function startRename(pid, fallback) {
+  // Find the name span in the candidate card for this pid
+  const cards = document.querySelectorAll(".cand");
+  for (const card of cards) {
+    const pidEl = card.querySelector(".pid");
+    if (!pidEl || !pidEl.textContent.includes(String(pid))) continue;
+    const nameEl = card.querySelector(".name");
+    if (!nameEl) continue;
+
+    const current = customNames[String(pid)] || fallback || "";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = current;
+    input.className = "rename-input";
+    input.style.cssText = nameEl.style.cssText;
+    input.setAttribute("data-pid", String(pid));
+    input.setAttribute("data-fallback", fallback || "");
+    // Replace the name span with the input
+    nameEl.replaceWith(input);
+    input.focus();
+    input.select();
+
+    const commit = () => {
+      const val = input.value.trim();
+      renamePID(pid, val || fallback || "");
+      // Don't re-render the whole list — just swap input back to span
+      const span = document.createElement("span");
+      span.className = "name" + (customNames[String(pid)] ? " custom-name" : "");
+      span.title = customNames[String(pid)] ? "Original: " + (fallback || "") : "";
+      span.textContent = getName(pid, fallback);
+      input.replaceWith(span);
+    };
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); commit(); }
+      else if (e.key === "Escape") { input.value = current; commit(); }
+    });
+    input.addEventListener("blur", () => { commit(); });
+    break;
+  }
+}
+
+function escapeHtml(s) {
+  return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+function escapeAttr(s) { return escapeHtml(s); }
+
+// ── Sessions ──
+async function attachTo(c) {
+  const existSid = Object.keys(sessions).find(sid => sessions[sid].pid === c.pid);
+  if (existSid) {
+    switchTab(existSid);
+    setStatus("info", `switched to existing PID ${c.pid}`);
+    return;
+  }
+  setStatus("info", `connecting PID ${c.pid}...`);
+  const r = await fetch("/api/sessions", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({pid: c.pid, interval: 0.4})
+  });
+  const {sid} = await r.json();
+  const ws = new WebSocket(`ws://${location.host}/ws/${sid}`);
+  sessions[sid] = {ws, pid: c.pid, name: c.name, lastFrame: null};
+  ws.onmessage = e => onFrame(sid, JSON.parse(e.data));
+  ws.onclose = () => setStatus("warn", `connection ${sid} closed`);
+  addTab(sid, c);
+  switchTab(sid);
+}
+
+function onFrame(sid, frame) {
+  const s = sessions[sid]; if (!s) return;
+  if (frame.type === "screen") {
+    s.lastFrame = frame;
+    if (activeSid === sid) renderFrame(frame);
+  } else if (frame.type === "error") {
+    if (activeSid === sid) {
+      drawPlaceholder("[ERROR] " + frame.msg);
+    }
+    setStatus("err", frame.msg);
+  } else if (frame.type === "attached") {
+    setStatus("live", `PID ${frame.pid} — live`);
+  }
+}
+
+// ── Canvas Terminal Renderer ──────────────────────────────────────────────
+// Windows Console default color palette (16-color VGA scheme)
+const CONSOLE_COLORS = [
+  "#0c0c0c",  //  0 Black
+  "#0037da",  //  1 Dark Blue
+  "#13a10e",  //  2 Dark Green
+  "#3a96dd",  //  3 Dark Cyan
+  "#c50f1f",  //  4 Dark Red
+  "#881798",  //  5 Dark Magenta
+  "#c19c00",  //  6 Dark Yellow
+  "#cccccc",  //  7 Gray (default fg)
+  "#767676",  //  8 Dark Gray
+  "#3b78ff",  //  9 Blue
+  "#16c60c",  // 10 Green
+  "#61d6d6",  // 11 Cyan
+  "#e74856",  // 12 Red
+  "#b4009e",  // 13 Magenta
+  "#f9f1a5",  // 14 Yellow
+  "#f2f2f2",  // 15 White
+];
+
+let _charWidth = 0;
+let _lineHeight = 0;
+let _fontSize = 12.5;
+
+function _initCanvasMetrics(ctx) {
+  if (_charWidth && _lineHeight) return;
+  ctx.font = `${_fontSize}px 'JetBrains Mono', 'Consolas', monospace`;
+  _charWidth = ctx.measureText("X").width;
+  _lineHeight = Math.round(_fontSize * 1.55);
+}
+
+function renderFrame(frame) {
+  const canvas = document.getElementById("terminal-canvas");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  _initCanvasMetrics(ctx);
+
+  const cols = frame.cols || 120;
+  const rows = frame.rows || 50;
+  const cw = _charWidth;
+  const lh = _lineHeight;
+
+  const canvasWidth = cols * cw;
+  const canvasHeight = rows * lh;
+
+  // HiDPI
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(canvasWidth * dpr);
+  canvas.height = Math.round(canvasHeight * dpr);
+  canvas.style.width = canvasWidth + "px";
+  canvas.style.height = canvasHeight + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.font = `${_fontSize}px 'JetBrains Mono', 'Consolas', monospace`;
+
+  // Background
+  ctx.fillStyle = CONSOLE_COLORS[0];
+  ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+  // Draw each row
+  const lineCount = frame.lines ? frame.lines.length : 0;
+  const textBaseline = Math.round(_fontSize * 1.12);
+  for (let r = 0; r < lineCount; r++) {
+    const runs = frame.lines[r];
+    if (!runs || runs.length === 0) continue;
+    const y = r * lh;
+    for (const run of runs) {
+      const x = run.x * cw;
+      const bg = run.b & 0xF;
+      const fg = run.f & 0xF;
+
+      // Background fill — use measureText for CJK-aware width
+      if (bg !== 0) {
+        ctx.fillStyle = CONSOLE_COLORS[bg] || CONSOLE_COLORS[0];
+        const textW = ctx.measureText(run.t).width;
+        ctx.fillRect(x, y, textW, lh);
+      }
+
+      // Foreground text
+      ctx.fillStyle = CONSOLE_COLORS[fg] || CONSOLE_COLORS[7];
+      ctx.fillText(run.t, x, y + textBaseline);
+    }
+  }
+
+  // Scroll: first frame → always bottom; subsequent → auto-follow if near bottom
+  const vp = document.getElementById("viewport");
+  const atBottom = vp.scrollHeight - vp.scrollTop - vp.clientHeight < 36;
+  const s = activeSid ? sessions[activeSid] : null;
+  const isFirst = s && !s._firstFrameRendered;
+  if (isFirst) { s._firstFrameRendered = true; }
+  if (isFirst || atBottom) vp.scrollTop = vp.scrollHeight;
+
+  // Mirror plain text for clipboard
+  _updateTextMirror(frame);
+}
+
+function _updateTextMirror(frame) {
+  const pre = document.getElementById("screen-text");
+  const canvas = document.getElementById("terminal-canvas");
+  if (!pre || !canvas) return;
+  // Pad each row to full cols so selection spans entire line width
+  const cols = frame.cols || 120;
+  const padded = (frame.lines || []).map(function(row) {
+    if (!row || row.length === 0) return "";
+    var chars = [];
+    for (var i = 0; i < row.length; i++) {
+      var run = row[i];
+      var x = run.x || 0;
+      for (var j = 0; j < run.t.length; j++) {
+        chars[x + j] = run.t[j];
+      }
+    }
+    var line = chars.join("");
+    // Pad to full console width so selection covers right-hand empty space
+    while (line.length < cols) line += " ";
+    return line;
+  }).join("\n");
+  pre.textContent = padded;
+  pre.style.width = canvas.style.width;
+  pre.style.height = canvas.style.height;
+}
+
+function getPlainText(frame) {
+  if (!frame || !frame.lines) return "";
+  return frame.lines
+    .map(function(row) {
+      if (!row || row.length === 0) return "";
+      var chars = [];
+      for (var i = 0; i < row.length; i++) {
+        var run = row[i];
+        var x = run.x || 0;
+        for (var j = 0; j < run.t.length; j++) {
+          chars[x + j] = run.t[j];
+        }
+      }
+      return chars.join("").replace(/\s+$/, "");
+    })
+    .join("\n");
+}
+
+function drawPlaceholder(msg) {
+  const canvas = document.getElementById("terminal-canvas");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const dpr = window.devicePixelRatio || 1;
+  const w = 720, h = 60;
+  canvas.width = Math.round(w * dpr);
+  canvas.height = Math.round(h * dpr);
+  canvas.style.width = w + "px";
+  canvas.style.height = h + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = "#060709";
+  ctx.fillRect(0, 0, w, h);
+  ctx.font = `13px 'JetBrains Mono', 'Consolas', monospace`;
+  ctx.fillStyle = "#5a6070";
+  ctx.fillText(msg, 0, 30);
+  var pre = document.getElementById("screen-text");
+  if (pre) { pre.textContent = ""; pre.style.width = ""; pre.style.height = ""; }
+}
+
+function addTab(sid, c) {
+  const tabs = document.getElementById("tabs");
+  const t = document.createElement("div");
+  t.className = "tab"; t.id = "tab-"+sid;
+  const display = getName(c.pid, c.name);
+  t.innerHTML = `<span>${escapeHtml(display)}#${c.pid}</span><span class="close">×</span>`;
+  t.onclick = () => switchTab(sid);
+  t.querySelector(".close").onclick = (e) => {
+    e.stopPropagation(); closeTab(sid);
+  };
+  tabs.appendChild(t);
+}
+
+function switchTab(sid) {
+  activeSid = sid;
+  document.querySelectorAll(".tab").forEach(el =>
+    el.classList.toggle("active", el.id === "tab-"+sid));
+  const s = sessions[sid];
+  if (s && s.lastFrame) renderFrame(s.lastFrame);
+  else drawPlaceholder("acquiring signal...");
+  const inp = document.getElementById("cmd-input");
+  inp.disabled = !s;
+  inp.placeholder = s
+    ? `[${s.name}#${s.pid}]  Enter send · Shift+Enter newline · Esc clear`
+    : "Attach a CLI to enable input…";
+  if (s) { inp.focus(); setStatus("live", `PID ${s.pid} — live`); }
+}
+
+async function closeTab(sid) {
+  const s = sessions[sid]; if (!s) return;
+  try { s.ws.close(); } catch(e) {}
+  await fetch("/api/sessions/"+sid, {method:"DELETE"});
+  delete sessions[sid];
+  const t = document.getElementById("tab-"+sid);
+  if (t) t.remove();
+  if (activeSid === sid) {
+    activeSid = null;
+    drawPlaceholder("(no active signal)");
+    const inp = document.getElementById("cmd-input");
+    inp.disabled = true; inp.style.height = "auto";
+    inp.placeholder = "Attach a CLI to enable input…";
+    setStatus("info", "idle");
+  }
+}
+
+function sendInput(text) {
+  const s = sessions[activeSid];
+  if (!s || !s.ws || s.ws.readyState !== WebSocket.OPEN) {
+    setStatus("warn", "WebSocket not connected");
+    return;
+  }
+  // Text + Enter in one message. Backend write_keystrokes() now
+  // properly injects \r as VK_RETURN so the CLI submits after typing.
+  s.ws.send(JSON.stringify({type: "input", data: text + "\r"}));
+}
+
+function setStatus(kind, msg) {
+  document.getElementById("status").textContent = msg;
+  const dot = document.getElementById("status-dot");
+  dot.className = "status-dot";
+  if (kind === "live") dot.classList.add("live");
+  if (kind === "warn" || kind === "err") dot.classList.add("warn");
+}
+
+// ── Skills ──
+async function browseSkillsFolder() {
+  setStatus("info", "opening folder picker...");
+  try {
+    const r = await fetch("/api/browse-folder");
+    const d = await r.json();
+    if (d.error) { setStatus("warn", d.error); return; }
+    if (!d.path) { setStatus("info", "cancelled"); return; }
+    document.getElementById("skills-path-input").value = d.path;
+    loadSkills();
+  } catch (e) { setStatus("warn", e.message); }
+}
+
+async function loadSkills() {
+  const path = document.getElementById("skills-path-input").value.trim();
+  if (!path) { setStatus("warn", "enter a skills directory path"); return; }
+  setStatus("info", "loading skills...");
+  try {
+    const r = await fetch("/api/skills", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({path})
+    });
+    const data = await r.json();
+    if (data.error) { setStatus("warn", data.error); return; }
+    renderSkillChips(data.skills || []);
+    setStatus("info", `${(data.skills||[]).length} skills loaded`);
+  } catch(e) { setStatus("warn", "skills load failed"); }
+}
+
+function renderSkillChips(skills) {
+  const box = document.getElementById("skill-chips");
+  box.innerHTML = "";
+  if (skills.length === 0) {
+    box.innerHTML = `<span style="color:var(--text-dim);font-size:10px;">none found</span>`;
+    return;
+  }
+  skills.forEach(name => {
+    const chip = document.createElement("span");
+    chip.className = "skill-chip";
+    chip.textContent = name;
+    chip.title = "Fill: /" + name;
+    chip.onclick = () => {
+      const inp = document.getElementById("cmd-input");
+      if (!inp.disabled) { inp.value = "/" + name; inp.focus(); }
+      else { setStatus("warn", "attach a CLI first"); }
+    };
+    box.appendChild(chip);
+  });
+}
+
+    // ── Copy screen (Ctrl+Shift+C) ──
+    let _copyTimer = 0;
+    document.addEventListener("keydown", function(e) {
+      if (e.key === "C" && e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey) {
+        e.preventDefault();
+        copyScreen();
+      }
+    });
+    async function copyScreen() {
+      const s = activeSid ? sessions[activeSid] : null;
+      const text = s && s.lastFrame ? getPlainText(s.lastFrame) : "";
+      if (!text) {
+        setStatus("warn", "nothing to copy");
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(text);
+        const len = text.length;
+        const preview = len > 120 ? text.slice(0, 117) + "..." : text;
+        setStatus("info", `copied ${len} chars — "${preview}"`);
+        clearTimeout(_copyTimer);
+        _copyTimer = setTimeout(() => {
+          const s2 = activeSid ? sessions[activeSid] : null;
+          setStatus(s2 ? "live" : "info", s2 ? `PID ${s2.pid} — live` : "idle");
+        }, 3000);
+      } catch (e) {
+        setStatus("warn", "copy failed — " + e.message);
+      }
+    }
+
+    loadCandidates();
+    drawPlaceholder("Select a CLI from left to attach.");
+</script>
+</body>
+</html>

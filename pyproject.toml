@@ -1,0 +1,11 @@
+[project]
+name = "cli-watchtower"
+version = "0.1.0"
+description = "Web UI to observe running CLI tools on Windows"
+requires-python = ">=3.10"
+
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "psutil>=5.9",
+]
