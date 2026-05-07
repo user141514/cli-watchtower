@@ -2,6 +2,8 @@
 
 Web UI to observe running CLI tools on Windows.
 
+[中文版本](README.zh-CN.md)
+
 ## Architecture
 
 ```
