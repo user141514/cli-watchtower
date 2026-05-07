@@ -1,8 +1,8 @@
 # CLI Watchtower
 
-用于在 Windows 上观察正在运行的 CLI 工具的 Web UI。
+用于在 Windows 上观察正在运行的 CLI 工具的 Web UI。背后的开发理念和故事记录在微信公众号：AI..whatever，小弟在此也是希望大家多多地关注和点赞
 
-[English README](README.md)
+[Engli，sh README](README.md)
 
 ## 架构
 
